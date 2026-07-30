@@ -252,6 +252,12 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
         case VideoEventType.pipStop:
           value = value.copyWith(isPip: false);
           break;
+        case VideoEventType.nextTrack:
+        case VideoEventType.previousTrack:
+          // Handled at the BetterPlayerController level (app decides what
+          // "next"/"previous" means); nothing to update in this layer's
+          // playback value.
+          break;
         case VideoEventType.unknown:
           break;
       }

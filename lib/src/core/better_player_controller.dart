@@ -1165,6 +1165,12 @@ class BetterPlayerController {
       case VideoEventType.bufferingEnd:
         _postEvent(BetterPlayerEvent(BetterPlayerEventType.bufferingEnd));
         break;
+      case VideoEventType.nextTrack:
+        _postEvent(BetterPlayerEvent(BetterPlayerEventType.nextTrack));
+        break;
+      case VideoEventType.previousTrack:
+        _postEvent(BetterPlayerEvent(BetterPlayerEventType.previousTrack));
+        break;
       default:
 
         ///TODO: Handle when needed

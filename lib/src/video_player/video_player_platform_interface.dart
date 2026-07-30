@@ -462,6 +462,14 @@ enum VideoEventType {
   /// Picture in picture mode has been dismissed
   pipStop,
 
+  /// The remote-control (lock screen / Control Center) next-track command
+  /// was triggered.
+  nextTrack,
+
+  /// The remote-control (lock screen / Control Center) previous-track
+  /// command was triggered.
+  previousTrack,
+
   /// An unknown event has been received.
   unknown,
 }

@@ -98,6 +98,8 @@ bool _remoteCommandsInitialized = false;
     NSString* author = dataSource[@"author"];
     NSString* imageUrl = dataSource[@"imageUrl"];
 
+    NSLog(@"[BetterPlayer] setupRemoteNotification showNotification=%d title=%@ author=%@", showNotification, title, author);
+
     if (showNotification){
         [self setRemoteCommandsNotificationActive];
         [self setupRemoteCommands: player];
@@ -128,47 +130,81 @@ bool _remoteCommandsInitialized = false;
     [commandCenter.togglePlayPauseCommand setEnabled:YES];
     [commandCenter.playCommand setEnabled:YES];
     [commandCenter.pauseCommand setEnabled:YES];
-    [commandCenter.nextTrackCommand setEnabled:NO];
-    [commandCenter.previousTrackCommand setEnabled:NO];
+    [commandCenter.nextTrackCommand setEnabled:YES];
+    [commandCenter.previousTrackCommand setEnabled:YES];
     if (@available(iOS 9.1, *)) {
         [commandCenter.changePlaybackPositionCommand setEnabled:YES];
     }
 
+    // eventSink relays the command to the Dart-side VideoPlayerController
+    // (see video_player.dart's eventListener), which is what actually calls
+    // play()/pause() on the native player via the method channel. The bug
+    // here was inverted logic: it sent "play" while already playing and
+    // "pause" while already paused, so the toggle looked completely
+    // unresponsive (both taps were no-ops matching the current state).
     [commandCenter.togglePlayPauseCommand addTargetWithHandler: ^MPRemoteCommandHandlerStatus(MPRemoteCommandEvent * _Nonnull event) {
-        if (_notificationPlayer != [NSNull null]){
+        NSLog(@"[BetterPlayer] togglePlayPauseCommand received, notificationPlayer=%@ isPlaying=%d", _notificationPlayer, _notificationPlayer != nil ? _notificationPlayer.isPlaying : -1);
+        if (_notificationPlayer != nil){
             if (_notificationPlayer.isPlaying){
-                _notificationPlayer.eventSink(@{@"event" : @"play"});
-            } else {
                 _notificationPlayer.eventSink(@{@"event" : @"pause"});
+            } else {
+                _notificationPlayer.eventSink(@{@"event" : @"play"});
             }
         }
         return MPRemoteCommandHandlerStatusSuccess;
     }];
 
     [commandCenter.playCommand addTargetWithHandler: ^MPRemoteCommandHandlerStatus(MPRemoteCommandEvent * _Nonnull event) {
-        if (_notificationPlayer != [NSNull null]){
+        NSLog(@"[BetterPlayer] playCommand received, notificationPlayer=%@", _notificationPlayer);
+        if (_notificationPlayer != nil){
             _notificationPlayer.eventSink(@{@"event" : @"play"});
         }
         return MPRemoteCommandHandlerStatusSuccess;
     }];
 
     [commandCenter.pauseCommand addTargetWithHandler: ^MPRemoteCommandHandlerStatus(MPRemoteCommandEvent * _Nonnull event) {
-        if (_notificationPlayer != [NSNull null]){
+        NSLog(@"[BetterPlayer] pauseCommand received, notificationPlayer=%@", _notificationPlayer);
+        if (_notificationPlayer != nil){
             _notificationPlayer.eventSink(@{@"event" : @"pause"});
         }
         return MPRemoteCommandHandlerStatusSuccess;
     }];
 
+    // Switching to the next/previous episode requires fetching new video
+    // data and a new data source, which only the Flutter app layer can do.
+    // We just relay the intent here; the app decides what "next"/"previous"
+    // means for its own content.
+    [commandCenter.nextTrackCommand addTargetWithHandler: ^MPRemoteCommandHandlerStatus(MPRemoteCommandEvent * _Nonnull event) {
+        NSLog(@"[BetterPlayer] nextTrackCommand received, notificationPlayer=%@", _notificationPlayer);
+        if (_notificationPlayer != nil){
+            _notificationPlayer.eventSink(@{@"event" : @"next"});
+        }
+        return MPRemoteCommandHandlerStatusSuccess;
+    }];
 
+    [commandCenter.previousTrackCommand addTargetWithHandler: ^MPRemoteCommandHandlerStatus(MPRemoteCommandEvent * _Nonnull event) {
+        NSLog(@"[BetterPlayer] previousTrackCommand received, notificationPlayer=%@", _notificationPlayer);
+        if (_notificationPlayer != nil){
+            _notificationPlayer.eventSink(@{@"event" : @"previous"});
+        }
+        return MPRemoteCommandHandlerStatusSuccess;
+    }];
 
     if (@available(iOS 9.1, *)) {
         [commandCenter.changePlaybackPositionCommand addTargetWithHandler:^MPRemoteCommandHandlerStatus(MPRemoteCommandEvent * _Nonnull event) {
-            if (_notificationPlayer != [NSNull null]){
+            NSLog(@"[BetterPlayer] changePlaybackPositionCommand received, notificationPlayer=%@", _notificationPlayer);
+            if (_notificationPlayer != nil){
                 MPChangePlaybackPositionCommandEvent * playbackEvent = (MPChangePlaybackRateCommandEvent * ) event;
                 CMTime time = CMTimeMake(playbackEvent.positionTime, 1);
                 int64_t millis = [BetterPlayerTimeUtils FLTCMTimeToMillis:(time)];
                 [_notificationPlayer seekTo: millis];
                 _notificationPlayer.eventSink(@{@"event" : @"seek", @"position": @(millis)});
+                // Push the new position immediately instead of waiting for the
+                // 1s periodic timer (setupUpdateListener), which can otherwise
+                // briefly re-report the pre-seek position and make the
+                // lock-screen scrubber look like it snapped back.
+                NSDictionary* dataSource = [_dataSourceDict objectForKey:[self getTextureId:_notificationPlayer]];
+                [self setupRemoteCommandNotification: _notificationPlayer, dataSource[@"title"], dataSource[@"author"], dataSource[@"imageUrl"]];
             }
             return MPRemoteCommandHandlerStatusSuccess;
         }];

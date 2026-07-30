@@ -409,6 +409,18 @@ class MethodChannelVideoPlayer extends VideoPlayerPlatform {
             key: key,
           );
 
+        case 'next':
+          return VideoEvent(
+            eventType: VideoEventType.nextTrack,
+            key: key,
+          );
+
+        case 'previous':
+          return VideoEvent(
+            eventType: VideoEventType.previousTrack,
+            key: key,
+          );
+
         default:
           return VideoEvent(
             eventType: VideoEventType.unknown,
